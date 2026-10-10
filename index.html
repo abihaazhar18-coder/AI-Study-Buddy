@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StudyMate AI – your offline AI study assistant</title>
+<meta name="description" content="StudyMate AI helps students organize studies, generate notes, practice flashcards and quizzes, and plan for exams. Runs fully offline in the browser.">
+<script>
+  // Capture any runtime error into #errors (used by smoke tests; hidden from users).
+  window.__errors = [];
+  function __logError(msg) {
+    window.__errors.push(String(msg));
+    var el = document.getElementById('errors');
+    if (el) el.textContent = window.__errors.join('\n');
+  }
+  window.onerror = function (msg, src, line, col) { __logError(msg + ' @' + line + ':' + col); };
+  window.addEventListener('unhandledrejection', function (e) { __logError('Unhandled rejection: ' + (e.reason && e.reason.message || e.reason)); });
+</script>
+<style>
+  :root {
+    --bg: #f5f7fb; --surface: #ffffff; --surface-2: #eef1f8; --text: #1b2333; --muted: #4f5b70;
+    --border: #d5dbe7; --primary: #4338ca; --primary-text: #ffffff; --primary-soft: #e0e7ff;
+    --ok: #166534; --ok-bg: #dcfce7; --bad: #991b1b; --bad-bg: #fee2e2; --warn-bg: #fef3c7;
+    --shadow: 0 1px 3px rgba(16,24,40,.08), 0 4px 12px rgba(16,24,40,.05); --radius: 12px;
+  }
+  [data-theme="dark"] {
+    --bg: #0f172a; --surface: #172036; --surface-2: #1f2a44; --text: #e5e9f2; --muted: #a9b4c8;
+    --border: #2f3b57; --primary: #a5b4fc; --primary-text: #111827; --primary-soft: #26305a;
+    --ok: #86efac; --ok-bg: #14361f; --bad: #fca5a5; --bad-bg: #3f1d1d; --warn-bg: #3a2f12;
+    --shadow: 0 1px 3px rgba(0,0,0,.4);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  a { color: var(--primary); }
+  .skip { position: absolute; left: -999px; top: 0; background: var(--primary); color: var(--primary-text); padding: 8px 12px; z-index: 10; }
+  .skip:focus { left: 8px; top: 8px; }
+  header.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand h1 { font-size: 1.25rem; margin: 0; }
+  .brand p { margin: 0; color: var(--muted); font-size: .85rem; }
+  .logo { width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(135deg, #6366f1, #06b6d4); display: grid; place-items: center; color: #fff; font-weight: 700; }
+  nav.tabs { display: flex; gap: 4px; overflow-x: auto; padding: 8px 20px; background: var(--surface); border-bottom: 1px solid var(--border); }
+  nav.tabs button { background: transparent; border: 0; color: var(--muted); padding: 8px 14px; border-radius: 8px; font: inherit; cursor: pointer; white-space: nowrap; }
+  nav.tabs button[aria-selected="true"] { background: var(--primary-soft); color: var(--text); font-weight: 600; }
+  main { max-width: 1100px; margin: 0 auto; padding: 20px; }
+  h2 { margin: 0 0 12px; font-size: 1.35rem; }
+  h3 { margin: 0 0 8px; font-size: 1.05rem; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); margin-bottom: 16px; }
+  .grid { display: grid; gap: 16px; }
+  .stats { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+  .two { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); }
+  .stat .label { color: var(--muted); font-size: .85rem; }
+  .stat .value { font-size: 1.8rem; font-weight: 700; }
+  .stat .sub { color: var(--muted); font-size: .8rem; }
+  label { display: block; font-weight: 600; font-size: .9rem; margin-bottom: 4px; }
+  input, select, textarea { width: 100%; font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+  textarea { min-height: 160px; resize: vertical; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+  .row > .field { flex: 1 1 180px; }
+  .field { margin-bottom: 10px; }
+  button.btn, .btn { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-weight: 600; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--primary); background: var(--primary); color: var(--primary-text); cursor: pointer; }
+  .btn.secondary { background: transparent; color: var(--text); border-color: var(--border); }
+  .btn.danger { background: transparent; color: var(--bad); border-color: var(--bad); }
+  .btn.small { padding: 4px 10px; font-size: .85rem; }
+  button:disabled { opacity: .6; cursor: not-allowed; }
+  :focus-visible { outline: 3px solid #f59e0b; outline-offset: 2px; }
+  ul.list { list-style: none; padding: 0; margin: 0; }
+  ul.list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  ul.list li:last-child { border-bottom: 0; }
+  .muted { color: var(--muted); }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; background: var(--primary-soft); font-size: .8rem; font-weight: 600; }
+  .ok { background: var(--ok-bg); color: var(--ok); }
+  .bad { background: var(--bad-bg); color: var(--bad); }
+  .notice { background: var(--warn-bg); border-radius: 8px; padding: 8px 12px; margin: 8px 0; }
+  .preview h1 { font-size: 1.3rem; } .preview h2 { font-size: 1.1rem; margin-top: 14px; }
+  fieldset { border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin: 0 0 12px; }
+  legend { font-weight: 600; padding: 0 6px; }
+  fieldset label { font-weight: 400; display: flex; gap: 8px; align-items: center; margin: 4px 0; }
+  fieldset input[type=radio], input[type=checkbox] { width: auto; }
+  .flash { min-height: 180px; display: grid; place-items: center; text-align: center; font-size: 1.2rem; padding: 24px; border: 2px dashed var(--border); border-radius: var(--radius); background: var(--surface-2); }
+  .day { margin-bottom: 14px; }
+  .day h3 { font-size: .95rem; color: var(--muted); }
+  .session { display: flex; gap: 10px; align-items: center; padding: 6px 0; }
+  .session label { font-weight: 400; margin: 0; display: flex; gap: 8px; align-items: center; }
+  .done { text-decoration: line-through; color: var(--muted); }
+  .bar { height: 8px; background: var(--surface-2); border-radius: 99px; overflow: hidden; }
+  .bar > span { display: block; height: 100%; background: var(--primary); }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  footer { text-align: center; color: var(--muted); font-size: .85rem; padding: 20px; }
+  @media (max-width: 600px) { header.top { flex-direction: column; align-items: flex-start; } main { padding: 12px; } }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<pre id="errors" hidden></pre>
+<header class="top">
+  <div class="brand">
+    <div class="logo" aria-hidden="true">SM</div>
+    <div><h1>StudyMate AI</h1><p>Organize studies, generate notes, ace your exams. Works offline.</p></div>
+  </div>
+  <div class="row">
+    <span id="provider-badge" class="pill">Offline AI</span>
+    <button type="button" class="btn secondary small" data-action="theme" id="theme-btn" aria-pressed="false">Dark mode</button>
+  </div>
+</header>
+<nav class="tabs" role="tablist" aria-label="Sections">
+  <button type="button" role="tab" id="tab-dashboard" aria-controls="panel-dashboard" data-action="tab" data-tab="dashboard">Dashboard</button>
+  <button type="button" role="tab" id="tab-subjects" aria-controls="panel-subjects" data-action="tab" data-tab="subjects">Subjects</button>
+  <button type="button" role="tab" id="tab-notes" aria-controls="panel-notes" data-action="tab" data-tab="notes">Notes</button>
+  <button type="button" role="tab" id="tab-flashcards" aria-controls="panel-flashcards" data-action="tab" data-tab="flashcards">Flashcards</button>
+  <button type="button" role="tab" id="tab-quiz" aria-controls="panel-quiz" data-action="tab" data-tab="quiz">Quiz</button>
+  <button type="button" role="tab" id="tab-planner" aria-controls="panel-planner" data-action="tab" data-tab="planner">Planner</button>
+  <button type="button" role="tab" id="tab-settings" aria-controls="panel-settings" data-action="tab" data-tab="settings">Settings</button>
+</nav>
+<main id="main" tabindex="-1">
+  <section role="tabpanel" id="panel-dashboard" aria-labelledby="tab-dashboard"></section>
+  <section role="tabpanel" id="panel-subjects" aria-labelledby="tab-subjects" hidden></section>
+  <section role="tabpanel" id="panel-notes" aria-labelledby="tab-notes" hidden></section>
+  <section role="tabpanel" id="panel-flashcards" aria-labelledby="tab-flashcards" hidden></section>
+  <section role="tabpanel" id="panel-quiz" aria-labelledby="tab-quiz" hidden></section>
+  <section role="tabpanel" id="panel-planner" aria-labelledby="tab-planner" hidden></section>
+  <section role="tabpanel" id="panel-settings" aria-labelledby="tab-settings" hidden></section>
+  <div id="live" class="sr-only" aria-live="polite"></div>
+</main>
+<footer>StudyMate AI · MIT License · Your data stays in this browser (localStorage).</footer>
+
+<!-- ============================================================
+     CORE: pure logic (AI, notes, quiz, planner, flashcards, storage).
+     No DOM access. Exposed as window.StudyCore for the app and tests.
+     ============================================================ -->
+<script id="core">
+window.StudyCore = (function () {
+  'use strict';
+
+  // ---------- helpers ----------
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+  function hashString(s) { var h = 2166136261; for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+  function rng(seed) { var a = seed >>> 0; return function () { a = (a + 0x6D2B79F5) >>> 0; var t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+  function shuffle(arr, rand) { var a = arr.slice(); for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(rand() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+  function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+  // ---------- dates (YYYY-MM-DD strings, UTC math to avoid DST issues) ----------
+  function parseDate(d) { var p = String(d).split('-').map(Number); return Date.UTC(p[0], p[1] - 1, p[2]); }
+  function fmt(ms) { return new Date(ms).toISOString().slice(0, 10); }
+  function addDays(d, n) { return fmt(parseDate(d) + n * 864e5); }
+  function daysBetween(a, b) { return Math.round((parseDate(b) - parseDate(a)) / 864e5); }
+  function todayStr(now) { var t = now || new Date(); return t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0'); }
+
+  // ---------- offline NLP ----------
+  var STOP = new Set(('a about above after again against all also am an and any are aren as at be because been before being below between both but by can could did do does doing down during each few for from further had has have having he her here hers him his how i if in into is it its itself just like made make many may me might more most much must my no nor not now of off on once only or other our out over own same she should so some such than that the their them then there these they this those through to too under until up upon very was we were what when where which while who whom why will with within without would you your yours one two three use used using uses called known states state refers means mean another every often usually make makes per get gets around across among than thus therefore however although though even each either neither whether since').split(' '));
+
+  function splitSentences(text) {
+    var t = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!t) return [];
+    return t.split(/(?<=[.!?])\s+(?=["'(\[]?[A-Z0-9])/).map(function (s) { return s.trim(); }).filter(function (s) { return s.length > 3; });
+  }
+  function tokenize(text) {
+    return (String(text || '').toLowerCase().match(/[a-z][a-z'’-]*[a-z]/g) || [])
+      .map(function (w) { return w.replace(/['’]s$/, ''); })
+      .filter(function (w) { return w.length > 2 && !STOP.has(w); });
+  }
+  function wordFreq(text) { var f = {}; tokenize(text).forEach(function (w) { f[w] = (f[w] || 0) + 1; }); return f; }
+  function extractKeywords(text, n) {
+    var f = wordFreq(text);
+    return Object.keys(f).filter(function (w) { return w.length > 3; })
+      .sort(function (a, b) { return (f[b] - f[a]) || (b.length - a.length) || (a < b ? -1 : 1); })
+      .slice(0, n || 8);
+  }
+  function scoreSentences(text) {
+    var f = wordFreq(text);
+    return splitSentences(text).map(function (s, i) {
+      var toks = tokenize(s), sum = 0;
+      toks.forEach(function (w) { sum += f[w]; });
+      return { sentence: s, index: i, score: toks.length ? sum / Math.sqrt(toks.length) : 0 };
+    });
+  }
+  function summarize(text, n) {
+    n = n || 3;
+    return scoreSentences(text).slice().sort(function (a, b) { return (b.score - a.score) || (a.index - b.index); })
+      .slice(0, n).sort(function (a, b) { return a.index - b.index; }).map(function (x) { return x.sentence; });
+  }
+  var PRONOUNS = new Set(['it', 'this', 'that', 'there', 'these', 'those', 'they', 'he', 'she', 'we', 'you', 'i', 'which', 'what', 'who']);
+  var DEF_RE = /^(?:(?:the|a|an)\s+)?([A-Za-z][\w'’ -]{1,48}?)\s+(is defined as|is called|refers to|means|is|are|was|were)\s+(.{8,})$/i;
+  function findDefinitions(text) {
+    var out = [], seen = new Set();
+    splitSentences(text).forEach(function (s) {
+      var m = s.match(DEF_RE);
+      if (!m) return;
+      var term = m[1].trim(), words = term.split(/\s+/);
+      if (words.length > 5 || PRONOUNS.has(words[0].toLowerCase())) return;
+      var key = term.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ term: term.charAt(0).toUpperCase() + term.slice(1), definition: m[3].replace(/[.!?]+$/, ''), sentence: s });
+    });
+    return out;
+  }
+
+  // ---------- notes ----------
+  function notesToMarkdown(n) {
+    var md = '# ' + (n.title || 'Study notes') + '\n\n## Summary\n';
+    n.summary.forEach(function (s) { md += '- ' + s + '\n'; });
+    md += '\n## Key concepts\n' + n.keyConcepts.map(function (k) { return '`' + k + '`'; }).join(', ') + '\n';
+    md += '\n## Definitions\n';
+    if (!n.definitions.length) md += '- (none detected)\n';
+    n.definitions.forEach(function (d) { md += '- **' + d.term + '**: ' + d.definition + '\n'; });
+    md += '\n## Notes\n';
+    n.bullets.forEach(function (b) { md += '- ' + b + '\n'; });
+    return md;
+  }
+  function generateNotes(text, title) {
+    var sentences = splitSentences(text);
+    var summary = summarize(text, Math.min(3, Math.max(1, Math.ceil(sentences.length / 4))));
+    var bullets = sentences.filter(function (s) { return summary.indexOf(s) < 0; }).slice(0, 10).map(function (s) { return s.replace(/[.!?]+$/, ''); });
+    var n = { title: title || 'Study notes', summary: summary, keyConcepts: extractKeywords(text, 8), definitions: findDefinitions(text).map(function (d) { return { term: d.term, definition: d.definition }; }), bullets: bullets };
+    n.markdown = notesToMarkdown(n);
+    return n;
+  }
+  // Tiny, safe markdown renderer: escapes first, then formats headings/bullets/bold/code.
+  function mdToHtml(md) {
+    var html = '', inList = false;
+    String(md || '').split('\n').forEach(function (line) {
+      var l = escapeHtml(line).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/`(.+?)`/g, '<code>$1</code>');
+      var isLi = /^\s*[-*] /.test(line);
+      if (isLi && !inList) { html += '<ul>'; inList = true; }
+      if (!isLi && inList) { html += '</ul>'; inList = false; }
+      if (/^### /.test(line)) html += '<h3>' + l.slice(4) + '</h3>';
+      else if (/^## /.test(line)) html += '<h2>' + l.slice(3) + '</h2>';
+      else if (/^# /.test(line)) html += '<h1>' + l.slice(2) + '</h1>';
+      else if (isLi) html += '<li>' + l.replace(/^\s*[-*] /, '') + '</li>';
+      else if (line.trim()) html += '<p>' + l + '</p>';
+    });
+    if (inList) html += '</ul>';
+    return html;
+  }
+
+  // ---------- quiz ----------
+  function generateQuiz(text, n) {
+    n = n || 5;
+    var rand = rng(hashString(String(text)));
+    var keywords = extractKeywords(text, 25);
+    var f = wordFreq(text);
+    var ranked = scoreSentences(text).sort(function (a, b) { return (b.score - a.score) || (a.index - b.index); });
+    var used = new Set(), qs = [];
+    for (var i = 0; i < ranked.length && qs.length < n; i++) {
+      var s = ranked[i].sentence, low = s.toLowerCase();
+      var present = keywords.filter(function (k) { return !used.has(k) && new RegExp('\\b' + escapeRegex(k) + '\\b', 'i').test(low); })
+        .sort(function (a, b) { return f[b] - f[a]; });
+      if (!present.length) continue;
+      var ans = present[0];
+      var distractors = shuffle(keywords.filter(function (k) { return k !== ans && !new RegExp('\\b' + escapeRegex(k) + '\\b', 'i').test(low); }), rand);
+      var re = new RegExp('\\b' + escapeRegex(ans) + '\\b', 'gi');
+      used.add(ans);
+      var wantTf = qs.length % 3 === 2 || distractors.length < 3;
+      if (wantTf && distractors.length >= 1) {
+        var isTrue = rand() < 0.5;
+        var stmt = isTrue ? s : s.replace(re, distractors[0]);
+        qs.push({ id: 'q' + qs.length, type: 'tf', prompt: 'True or false: ' + stmt, options: ['True', 'False'], answer: isTrue ? 'True' : 'False', explanation: s });
+      } else if (!wantTf) {
+        qs.push({ id: 'q' + qs.length, type: 'mcq', prompt: s.replace(re, '_____'), options: shuffle([ans].concat(distractors.slice(0, 3)), rand), answer: ans, explanation: s });
+      }
+    }
+    return qs;
+  }
+  function gradeQuiz(questions, answers) {
+    var results = questions.map(function (q, i) {
+      var given = answers[q.id] != null ? answers[q.id] : answers[i];
+      return { id: q.id, given: given == null ? null : given, answer: q.answer, correct: given === q.answer, explanation: q.explanation };
+    });
+    var correct = results.filter(function (r) { return r.correct; }).length;
+    return { correct: correct, total: questions.length, percent: questions.length ? Math.round(correct * 100 / questions.length) : 0, results: results };
+  }
+
+  // ---------- planner ----------
+  // Weighted by exam proximity (sooner = more) and weakness (lower avg quiz score = more).
+  // The day before each exam is a dedicated review day for that subject.
+  function generatePlan(opts) {
+    var start = opts.startDate, total = Math.round(Math.max(0.5, Number(opts.hoursPerDay) || 2) * 60);
+    var scores = opts.scores || {};
+    var subs = (opts.subjects || []).filter(function (s) { return s.examDate && s.examDate > start; });
+    if (!subs.length) return [];
+    var last = subs.reduce(function (m, s) { return s.examDate > m ? s.examDate : m; }, start);
+    var sessions = [];
+    for (var d = start, guard = 0; d < last && guard < 366; d = addDays(d, 1), guard++) {
+      var active = subs.filter(function (s) { return d < s.examDate; });
+      if (!active.length) continue;
+      var review = active.filter(function (s) { return addDays(d, 1) === s.examDate; });
+      var pool = review.length ? review : active;
+      var weights = pool.map(function (s) {
+        var sc = scores[s.id];
+        var weak = sc == null ? 1.5 : 1 + (100 - sc) / 100;
+        return review.length ? 1 : weak / daysBetween(d, s.examDate);
+      });
+      var sumW = weights.reduce(function (a, b) { return a + b; }, 0);
+      var mins = weights.map(function (w) { return Math.floor(total * w / sumW / 15) * 15; });
+      if (mins.every(function (m) { return m === 0; })) { var top = weights.indexOf(Math.max.apply(null, weights)); mins[top] = total; }
+      pool.forEach(function (s, i) {
+        if (mins[i] > 0) sessions.push({ id: d + '_' + s.id, date: d, subjectId: s.id, subjectName: s.name, minutes: mins[i], type: review.length ? 'review' : 'study' });
+      });
+    }
+    return sessions;
+  }
+
+  // ---------- flashcards (SM-2 style) ----------
+  function createCard(front, back, subjectId, today) {
+    return { id: uid(), subjectId: subjectId || null, front: String(front), back: String(back), ease: 2.5, interval: 0, reps: 0, due: today || todayStr() };
+  }
+  function reviewCard(card, rating, today) {
+    var c = Object.assign({}, card);
+    today = today || todayStr();
+    if (rating === 'again') { c.reps = 0; c.interval = 1; c.ease = Math.max(1.3, +(c.ease - 0.2).toFixed(2)); }
+    else if (rating === 'good') { c.reps += 1; c.interval = c.reps === 1 ? 1 : c.reps === 2 ? 6 : Math.round(c.interval * c.ease); }
+    else if (rating === 'easy') { c.reps += 1; c.interval = c.reps === 1 ? 4 : Math.round(Math.max(1, c.interval) * c.ease * 1.3); c.ease = +(c.ease + 0.15).toFixed(2); }
+    else throw new Error('Unknown rating: ' + rating);
+    c.due = addDays(today, c.interval);
+    return c;
+  }
+  function isDue(card, today) { return card.due <= (today || todayStr()); }
+  function cardsFromNotes(notes, text, subjectId, today) {
+    var cards = [], terms = new Set();
+    (notes.definitions || []).forEach(function (d) { terms.add(d.term.toLowerCase()); cards.push(createCard(d.term, d.definition, subjectId, today)); });
+    var sentences = splitSentences(text || '');
+    (notes.keyConcepts || []).filter(function (k) { return !terms.has(k); }).slice(0, 5).forEach(function (k) {
+      var re = new RegExp('\\b' + escapeRegex(k) + '\\b', 'i');
+      var s = sentences.filter(function (x) { return re.test(x); })[0];
+      if (s) cards.push(createCard('Fill the blank: ' + s.replace(new RegExp('\\b' + escapeRegex(k) + '\\b', 'gi'), '_____'), k, subjectId, today));
+    });
+    return cards;
+  }
+
+  // ---------- dashboard stats ----------
+  function computeStats(state, today) {
+    today = today || todayStr();
+    var upcoming = state.subjects.filter(function (s) { return s.examDate && s.examDate >= today; })
+      .map(function (s) { return { id: s.id, name: s.name, examDate: s.examDate, daysLeft: daysBetween(today, s.examDate) }; })
+      .sort(function (a, b) { return a.daysLeft - b.daysLeft; });
+    var att = state.attempts || [];
+    var avg = att.length ? Math.round(att.reduce(function (a, x) { return a + x.percent; }, 0) / att.length) : null;
+    var sess = (state.plan && state.plan.sessions) || [];
+    var done = sess.filter(function (s) { return state.plan.done[s.id]; }).length;
+    return { subjects: state.subjects.length, upcoming: upcoming, avgScore: avg, planPct: sess.length ? Math.round(done * 100 / sess.length) : 0, planDone: done, planTotal: sess.length, cardsDue: (state.cards || []).filter(function (c) { return isDue(c, today); }).length, cardsTotal: (state.cards || []).length };
+  }
+  function subjectScores(attempts) {
+    var acc = {};
+    (attempts || []).forEach(function (a) { (acc[a.subjectId] = acc[a.subjectId] || []).push(a.percent); });
+    var out = {};
+    Object.keys(acc).forEach(function (k) { out[k] = acc[k].reduce(function (a, b) { return a + b; }, 0) / acc[k].length; });
+    return out;
+  }
+
+  // ---------- storage ----------
+  function defaultState() {
+    return { subjects: [], notes: [], attempts: [], cards: [], plan: { sessions: [], done: {}, hoursPerDay: 2, startDate: null }, settings: { dark: false, apiBase: '', apiKey: '', model: 'gpt-4o-mini' } };
+  }
+  function normalizeState(s) {
+    var d = defaultState(); s = s && typeof s === 'object' ? s : {};
+    ['subjects', 'notes', 'attempts', 'cards'].forEach(function (k) { d[k] = Array.isArray(s[k]) ? s[k] : []; });
+    d.plan = Object.assign(d.plan, s.plan || {}); if (!d.plan.done) d.plan.done = {};
+    d.settings = Object.assign(d.settings, s.settings || {});
+    return d;
+  }
+  function memoryStorage() { var m = {}; return { getItem: function (k) { return k in m ? m[k] : null; }, setItem: function (k, v) { m[k] = String(v); }, removeItem: function (k) { delete m[k]; } }; }
+  function createStore(backend, key) {
+    key = key || 'studymate_v1';
+    return {
+      load: function () { try { var raw = backend.getItem(key); return normalizeState(raw ? JSON.parse(raw) : null); } catch (e) { return defaultState(); } },
+      save: function (state) { backend.setItem(key, JSON.stringify(state)); },
+      clear: function () { backend.removeItem(key); }
+    };
+  }
+
+  // ---------- optional online AI (OpenAI-compatible), always falls back offline ----------
+  function hasApi(settings) { return !!(settings && settings.apiBase && settings.apiKey); }
+  function parseJsonContent(content) { return JSON.parse(String(content).replace(/^\s*```(?:json)?/i, '').replace(/```\s*$/, '').trim()); }
+  function chatJson(settings, system, user, fetchFn) {
+    var f = fetchFn || (typeof fetch !== 'undefined' ? fetch.bind(window) : null);
+    if (!f) return Promise.reject(new Error('fetch unavailable'));
+    return f(settings.apiBase.replace(/\/+$/, '') + '/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + settings.apiKey },
+      body: JSON.stringify({ model: settings.model || 'gpt-4o-mini', temperature: 0.2, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] })
+    }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (j) { return parseJsonContent(j.choices[0].message.content); });
+  }
+  function validNotes(n) { return n && Array.isArray(n.summary) && Array.isArray(n.keyConcepts) && Array.isArray(n.definitions) && Array.isArray(n.bullets) && n.definitions.every(function (d) { return d && typeof d.term === 'string' && typeof d.definition === 'string'; }); }
+  function validQuiz(qs) { return Array.isArray(qs) && qs.length > 0 && qs.every(function (q) { return q && typeof q.prompt === 'string' && Array.isArray(q.options) && q.options.indexOf(q.answer) >= 0 && new Set(q.options).size === q.options.length; }); }
+  function aiNotes(text, title, settings, fetchFn) {
+    var offline = function (err) { return { notes: generateNotes(text, title), provider: 'offline', error: err ? String(err.message || err) : null }; };
+    if (!hasApi(settings)) return Promise.resolve(offline());
+    return chatJson(settings, 'You are a study assistant. Reply with JSON only: {"summary":[string],"keyConcepts":[string],"definitions":[{"term":string,"definition":string}],"bullets":[string]}.', 'Create study notes from this material:\n\n' + text, fetchFn)
+      .then(function (n) { if (!validNotes(n)) throw new Error('Bad JSON shape'); n.title = title || 'Study notes'; n.markdown = notesToMarkdown(n); return { notes: n, provider: 'api', error: null }; })
+      .catch(offline);
+  }
+  function aiQuiz(text, n, settings, fetchFn) {
+    var offline = function (err) { return { questions: generateQuiz(text, n), provider: 'offline', error: err ? String(err.message || err) : null }; };
+    if (!hasApi(settings)) return Promise.resolve(offline());
+    return chatJson(settings, 'You are a quiz generator. Reply with JSON only: {"questions":[{"type":"mcq"|"tf","prompt":string,"options":[string],"answer":string,"explanation":string}]}. MCQ has 4 unique options; tf options are ["True","False"].', 'Write ' + n + ' questions from this material:\n\n' + text, fetchFn)
+      .then(function (j) { var qs = j && j.questions; if (!validQuiz(qs)) throw new Error('Bad JSON shape'); return { questions: qs.slice(0, n).map(function (q, i) { return Object.assign({}, q, { id: 'q' + i }); }), provider: 'api', error: null }; })
+      .catch(offline);
+  }
+
+  return {
+    escapeHtml: escapeHtml, uid: uid, addDays: addDays, daysBetween: daysBetween, todayStr: todayStr,
+    splitSentences: splitSentences, tokenize: tokenize, extractKeywords: extractKeywords, summarize: summarize, findDefinitions: findDefinitions,
+    generateNotes: generateNotes, notesToMarkdown: notesToMarkdown, mdToHtml: mdToHtml,
+    generateQuiz: generateQuiz, gradeQuiz: gradeQuiz, generatePlan: generatePlan, subjectScores: subjectScores,
+    createCard: createCard, reviewCard: reviewCard, isDue: isDue, cardsFromNotes: cardsFromNotes,
+    computeStats: computeStats, defaultState: defaultState, normalizeState: normalizeState, memoryStorage: memoryStorage, createStore: createStore,
+    aiNotes: aiNotes, aiQuiz: aiQuiz, validQuiz: validQuiz, validNotes: validNotes
+  };
+})();
+</script>
+
+<!-- ============================================================
+     APP: UI rendering and event handling.
+     ============================================================ -->
+<script id="app">
+(function () {
+  'use strict';
+  var C = window.StudyCore, esc = C.escapeHtml;
+  var KEY = /[?&]test\b/.test(location.search) ? 'studymate_test_v1' : 'studymate_v1';
+  var backend;
+  try { backend = window.localStorage; backend.getItem('probe'); } catch (e) { backend = C.memoryStorage(); }
+  var store = C.createStore(backend, KEY);
+  var state = store.load();
+  var ui = { tab: 'dashboard', noteId: null, draftTitle: '', draftText: '', draftSubject: '', status: '', quiz: null, quizResult: null, practice: null, flipped: false, busy: false };
+
+  function save() { try { store.save(state); } catch (e) { announce('Could not save: storage is full or blocked.'); } }
+  function today() { return C.todayStr(); }
+  function subj(id) { return state.subjects.filter(function (s) { return s.id === id; })[0]; }
+  function subjName(id) { var s = subj(id); return s ? s.name : 'Unassigned'; }
+  function announce(msg) { document.getElementById('live').textContent = msg; }
+  function fmtDate(d) { return new Date(d + 'T00:00:00Z').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }); }
+  function fmtMin(m) { var h = Math.floor(m / 60), r = m % 60; return (h ? h + 'h' : '') + (r ? (h ? ' ' : '') + r + 'm' : '') || '0m'; }
+  function subjectOptions(selected, includeAll) {
+    return (includeAll ? '<option value="">All subjects</option>' : '') + state.subjects.map(function (s) {
+      return '<option value="' + esc(s.id) + '"' + (s.id === selected ? ' selected' : '') + '>' + esc(s.name) + '</option>';
+    }).join('');
+  }
+  function emptyHint(msg) { return '<p class="muted">' + msg + '</p>'; }
+  function download(name, text, type) {
+    var blob = new Blob([text], { type: type || 'text/plain' });
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+  }
+  function safeName(s) { return String(s || 'notes').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '_') || 'notes'; }
+
+  // ---------- renderers ----------
+  function renderDashboard() {
+    var st = C.computeStats(state, today()), next = st.upcoming[0];
+    var html = '<h2>Dashboard</h2><div class="grid stats">' +
+      stat('Subjects', st.subjects, 'being studied') +
+      stat('Upcoming exams', st.upcoming.length, next ? 'Next: ' + esc(next.name) + ' in ' + next.daysLeft + ' day' + (next.daysLeft === 1 ? '' : 's') : 'none scheduled') +
+      stat('Avg quiz score', st.avgScore == null ? '–' : st.avgScore + '%', (state.attempts.length) + ' attempt(s)') +
+      stat('Planner done', st.planPct + '%', st.planDone + ' / ' + st.planTotal + ' sessions') +
+      stat('Cards due today', st.cardsDue, st.cardsTotal + ' card(s) total') + '</div>';
+    html += '<div class="grid two" style="margin-top:16px"><div class="card"><h3>Upcoming exams</h3>' +
+      (st.upcoming.length ? '<ul class="list">' + st.upcoming.map(function (u) {
+        return '<li><span>' + esc(u.name) + ' <span class="muted">(' + esc(fmtDate(u.examDate)) + ')</span></span><span class="pill' + (u.daysLeft <= 3 ? ' bad' : '') + '">' + (u.daysLeft === 0 ? 'Today' : u.daysLeft + ' days left') + '</span></li>';
+      }).join('') + '</ul>' : emptyHint('No exams yet. Add subjects with exam dates.')) + '</div>';
+    var todays = state.plan.sessions.filter(function (s) { return s.date === today(); });
+    html += '<div class="card"><h3>Today\'s plan</h3>' + (todays.length ? '<ul class="list">' + todays.map(function (s) {
+      return '<li><span class="' + (state.plan.done[s.id] ? 'done' : '') + '">' + esc(s.subjectName) + ' · ' + (s.type === 'review' ? 'Review' : 'Study') + '</span><span class="pill">' + fmtMin(s.minutes) + '</span></li>';
+    }).join('') + '</ul>' : emptyHint('Nothing scheduled today. Generate a plan in the Planner tab.')) +
+      '<div class="bar" role="img" aria-label="Planner ' + st.planPct + '% complete"><span style="width:' + st.planPct + '%"></span></div></div></div>';
+    html += '<div class="card"><h3>Get started</h3><p class="muted">New here? Load sample subjects (Photosynthesis, World War I, Newton\'s laws) with notes, flashcards, a quiz attempt and a plan.</p>' +
+      '<div class="row"><button type="button" class="btn" data-action="demo">Load demo data</button><button type="button" class="btn danger" data-action="reset">Reset data</button></div></div>';
+    return html;
+  }
+  function stat(label, value, sub) { return '<div class="stat"><div class="label">' + label + '</div><div class="value">' + value + '</div><div class="sub">' + sub + '</div></div>'; }
+
+  function renderSubjects() {
+    return '<h2>Subjects</h2><div class="card"><form data-form="subject-add" class="row">' +
+      '<div class="field"><label for="sub-name">Subject name</label><input id="sub-name" name="name" required maxlength="80" placeholder="e.g. Biology"></div>' +
+      '<div class="field"><label for="sub-date">Exam date</label><input id="sub-date" name="examDate" type="date" required min="' + today() + '"></div>' +
+      '<div class="field" style="flex:0 0 auto"><button class="btn" type="submit">Add subject</button></div></form></div>' +
+      '<div class="card"><h3>Your subjects</h3>' + (state.subjects.length ? '<ul class="list">' + state.subjects.map(function (s) {
+        var d = C.daysBetween(today(), s.examDate);
+        var notes = state.notes.filter(function (n) { return n.subjectId === s.id; }).length;
+        return '<li><span><strong>' + esc(s.name) + '</strong> <span class="muted">· exam ' + esc(fmtDate(s.examDate)) + ' (' + (d < 0 ? 'passed' : d + ' days') + ') · ' + notes + ' note(s)</span></span>' +
+          '<button type="button" class="btn danger small" data-action="subject-del" data-id="' + esc(s.id) + '" aria-label="Delete ' + esc(s.name) + '">Delete</button></li>';
+      }).join('') + '</ul>' : emptyHint('No subjects yet.')) + '</div>';
+  }
+
+  function renderNotes() {
+    var html = '<h2>Notes generator</h2>';
+    if (!state.subjects.length) return html + '<div class="card">' + emptyHint('Add a subject first (Subjects tab), or load demo data from the Dashboard.') + '</div>';
+    html += '<div class="card"><form data-form="note-generate">' +
+      '<div class="row"><div class="field"><label for="note-subject">Subject</label><select id="note-subject" name="subjectId">' + subjectOptions(ui.draftSubject || state.subjects[0].id) + '</select></div>' +
+      '<div class="field"><label for="note-title">Title</label><input id="note-title" name="title" maxlength="120" placeholder="e.g. Chapter 3" value="' + esc(ui.draftTitle) + '"></div>' +
+      '<div class="field"><label for="note-file">Load .txt / .md file (optional)</label><input id="note-file" type="file" accept=".txt,.md,text/plain,text/markdown"></div></div>' +
+      '<div class="field"><label for="note-text">Study material</label><textarea id="note-text" name="text" required placeholder="Paste your textbook section, lecture transcript or notes here...">' + esc(ui.draftText) + '</textarea></div>' +
+      '<button class="btn" type="submit"' + (ui.busy ? ' disabled' : '') + '>' + (ui.busy ? 'Generating…' : 'Generate notes') + '</button> <span class="muted">' + esc(ui.status) + '</span></form></div>';
+    var note = state.notes.filter(function (n) { return n.id === ui.noteId; })[0];
+    if (note) {
+      html += '<div class="grid two"><div class="card"><h3>Edit: ' + esc(note.title) + ' <span class="pill">' + esc(subjName(note.subjectId)) + '</span></h3>' +
+        '<label for="note-editor">Markdown</label><textarea id="note-editor" style="min-height:320px">' + esc(note.markdown) + '</textarea>' +
+        '<div class="row" style="margin-top:10px"><button type="button" class="btn" data-action="note-save">Save changes</button>' +
+        '<button type="button" class="btn secondary" data-action="note-dl" data-ext="md">Download .md</button>' +
+        '<button type="button" class="btn secondary" data-action="note-dl" data-ext="txt">Download .txt</button>' +
+        '<button type="button" class="btn secondary" data-action="note-cards">Make flashcards</button>' +
+        '<button type="button" class="btn secondary" data-action="note-quiz">Quiz me</button></div></div>' +
+        '<div class="card preview"><h3>Preview</h3><div id="note-preview">' + C.mdToHtml(note.markdown) + '</div></div></div>';
+    }
+    html += '<div class="card"><h3>Saved notes</h3>' + (state.notes.length ? '<ul class="list">' + state.notes.map(function (n) {
+      return '<li><span><strong>' + esc(n.title) + '</strong> <span class="muted">· ' + esc(subjName(n.subjectId)) + ' · ' + esc(n.createdAt.slice(0, 10)) + '</span></span><span class="row">' +
+        '<button type="button" class="btn secondary small" data-action="note-open" data-id="' + esc(n.id) + '">Open</button>' +
+        '<button type="button" class="btn danger small" data-action="note-del" data-id="' + esc(n.id) + '" aria-label="Delete note ' + esc(n.title) + '">Delete</button></span></li>';
+    }).join('') + '</ul>' : emptyHint('No notes yet. Paste material above and click Generate.')) + '</div>';
+    return html;
+  }
+
+  function renderFlashcards() {
+    var html = '<h2>Flashcards</h2>';
+    var due = state.cards.filter(function (c) { return C.isDue(c, today()); });
+    if (ui.practice) {
+      var card = state.cards.filter(function (c) { return c.id === ui.practice.queue[0]; })[0];
+      html += '<div class="card"><h3>Practice <span class="pill">' + ui.practice.queue.length + ' left</span></h3>';
+      if (!card) html += '<p>All due cards reviewed. Nice work.</p><button type="button" class="btn" data-action="practice-stop">Done</button>';
+      else {
+        html += '<div class="flash" aria-live="polite"><div><div class="muted" style="font-size:.85rem">' + esc(subjName(card.subjectId)) + ' · ' + (ui.flipped ? 'Answer' : 'Question') + '</div><div>' + esc(ui.flipped ? card.back : card.front) + '</div></div></div><div class="row" style="margin-top:12px">' +
+          (ui.flipped ? '<button type="button" class="btn danger" data-action="card-rate" data-rating="again">Again</button><button type="button" class="btn secondary" data-action="card-rate" data-rating="good">Good</button><button type="button" class="btn" data-action="card-rate" data-rating="easy">Easy</button>'
+            : '<button type="button" class="btn" data-action="card-flip">Show answer</button>') +
+          '<button type="button" class="btn secondary" data-action="practice-stop">Stop</button></div>';
+      }
+      return html + '</div>';
+    }
+    html += '<div class="card"><p><strong>' + due.length + '</strong> card(s) due today out of ' + state.cards.length + '.</p>' +
+      '<div class="row"><div class="field"><label for="practice-subject">Practice subject</label><select id="practice-subject">' + subjectOptions('', true) + '</select></div>' +
+      '<div class="field" style="flex:0 0 auto"><button type="button" class="btn" data-action="practice-start"' + (due.length ? '' : ' disabled') + '>Start practice</button></div></div></div>';
+    html += '<div class="card"><h3>Add a card</h3>' + (state.subjects.length ? '<form data-form="card-add"><div class="row">' +
+      '<div class="field"><label for="card-subject">Subject</label><select id="card-subject" name="subjectId">' + subjectOptions(state.subjects[0].id) + '</select></div>' +
+      '<div class="field"><label for="card-front">Front (question)</label><input id="card-front" name="front" required maxlength="300"></div>' +
+      '<div class="field"><label for="card-back">Back (answer)</label><input id="card-back" name="back" required maxlength="500"></div>' +
+      '<div class="field" style="flex:0 0 auto"><button class="btn" type="submit">Add card</button></div></div></form>' : emptyHint('Add a subject first.')) +
+      '<p class="muted">Tip: open a note and click "Make flashcards" to auto-generate cards from definitions and key concepts.</p></div>';
+    html += '<div class="card"><h3>All cards</h3>' + (state.cards.length ? '<ul class="list">' + state.cards.map(function (c) {
+      return '<li><span><strong>' + esc(c.front) + '</strong><br><span class="muted">' + esc(c.back) + ' · ' + esc(subjName(c.subjectId)) + ' · due ' + esc(c.due) + '</span></span>' +
+        '<button type="button" class="btn danger small" data-action="card-del" data-id="' + esc(c.id) + '">Delete</button></li>';
+    }).join('') + '</ul>' : emptyHint('No cards yet.')) + '</div>';
+    return html;
+  }
+
+  function renderQuiz() {
+    var html = '<h2>Quiz practice</h2>';
+    if (!state.notes.length) return html + '<div class="card">' + emptyHint('Generate a note first; quizzes are built from your study material.') + '</div>';
+    html += '<div class="card"><form data-form="quiz-gen" class="row">' +
+      '<div class="field"><label for="quiz-note">Note / material</label><select id="quiz-note" name="noteId">' + state.notes.map(function (n) {
+        return '<option value="' + esc(n.id) + '"' + (ui.quiz && ui.quiz.noteId === n.id ? ' selected' : '') + '>' + esc(n.title) + ' (' + esc(subjName(n.subjectId)) + ')</option>';
+      }).join('') + '</select></div>' +
+      '<div class="field" style="flex:0 1 140px"><label for="quiz-n">Questions</label><input id="quiz-n" name="n" type="number" min="1" max="15" value="5"></div>' +
+      '<div class="field" style="flex:0 0 auto"><button class="btn" type="submit"' + (ui.busy ? ' disabled' : '') + '>Generate quiz</button></div></form></div>';
+    if (ui.quiz) {
+      var r = ui.quizResult;
+      html += '<div class="card"><form data-form="quiz-submit">' + (ui.quiz.questions.length ? '' : emptyHint('Not enough material to build questions. Add more text to the note.'));
+      ui.quiz.questions.forEach(function (q, i) {
+        var res = r && r.results[i];
+        html += '<fieldset><legend>Q' + (i + 1) + '. ' + (q.type === 'tf' ? 'True / False' : 'Multiple choice') + '</legend><p>' + esc(q.prompt) + '</p>' +
+          q.options.map(function (o, j) {
+            var id = 'q' + i + '_' + j;
+            return '<label for="' + id + '"><input type="radio" id="' + id + '" name="' + esc(q.id) + '" value="' + esc(o) + '"' + (res && res.given === o ? ' checked' : '') + (r ? ' disabled' : '') + '> ' + esc(o) + '</label>';
+          }).join('') +
+          (res ? '<p class="pill ' + (res.correct ? 'ok' : 'bad') + '">' + (res.correct ? 'Correct' : 'Incorrect · answer: ' + esc(q.answer)) + '</p><p class="muted">Source: ' + esc(q.explanation) + '</p>' : '') + '</fieldset>';
+      });
+      if (r) html += '<p class="notice" role="status"><strong>Score: ' + r.correct + ' / ' + r.total + ' (' + r.percent + '%)</strong></p><button type="button" class="btn secondary" data-action="quiz-clear">New quiz</button>';
+      else if (ui.quiz.questions.length) html += '<button class="btn" type="submit">Submit answers</button>';
+      html += '</form></div>';
+    }
+    html += '<div class="card"><h3>Score history</h3>' + (state.attempts.length ? '<ul class="list">' + state.attempts.slice().reverse().map(function (a) {
+      return '<li><span>' + esc(subjName(a.subjectId)) + ' <span class="muted">· ' + esc(a.date) + '</span></span><span class="pill ' + (a.percent >= 60 ? 'ok' : 'bad') + '">' + a.correct + '/' + a.total + ' (' + a.percent + '%)</span></li>';
+    }).join('') + '</ul>' : emptyHint('No attempts yet.')) + '</div>';
+    return html;
+  }
+
+  function renderPlanner() {
+    var p = state.plan, html = '<h2>Study planner</h2>';
+    html += '<div class="card"><form data-form="plan-gen" class="row">' +
+      '<div class="field"><label for="plan-hours">Hours per day</label><input id="plan-hours" name="hours" type="number" min="0.5" max="16" step="0.5" value="' + esc(p.hoursPerDay || 2) + '"></div>' +
+      '<div class="field"><label for="plan-start">Start date</label><input id="plan-start" name="start" type="date" value="' + esc(p.startDate || today()) + '"></div>' +
+      '<div class="field" style="flex:0 0 auto"><button class="btn" type="submit">' + (p.sessions.length ? 'Regenerate plan' : 'Generate plan') + '</button></div></form>' +
+      '<p class="muted">Time is weighted toward sooner exams and subjects with lower quiz scores. The day before each exam is a review day.</p></div>';
+    if (!p.sessions.length) return html + '<div class="card">' + emptyHint(state.subjects.length ? 'No plan yet. Click Generate plan.' : 'Add subjects with future exam dates first.') + '</div>';
+    var byDate = {};
+    p.sessions.forEach(function (s) { (byDate[s.date] = byDate[s.date] || []).push(s); });
+    html += '<div class="card">' + Object.keys(byDate).sort().map(function (d) {
+      return '<div class="day"><h3>' + esc(fmtDate(d)) + (d === today() ? ' · Today' : '') + '</h3>' + byDate[d].map(function (s) {
+        var id = 'sess_' + s.id, done = !!p.done[s.id];
+        return '<div class="session"><label for="' + esc(id) + '" class="' + (done ? 'done' : '') + '"><input type="checkbox" id="' + esc(id) + '" data-action="plan-toggle" data-id="' + esc(s.id) + '"' + (done ? ' checked' : '') + '> ' +
+          esc(s.subjectName) + ' · ' + (s.type === 'review' ? '<strong>Review before exam</strong>' : 'Study') + ' · ' + fmtMin(s.minutes) + '</label></div>';
+      }).join('') + '</div>';
+    }).join('') + '</div>';
+    return html;
+  }
+
+  function renderSettings() {
+    var s = state.settings;
+    return '<h2>Settings</h2><div class="card"><h3>Appearance</h3><button type="button" class="btn secondary" data-action="theme" aria-pressed="' + !!s.dark + '">' + (s.dark ? 'Switch to light mode' : 'Switch to dark mode') + '</button></div>' +
+      '<div class="card"><h3>Optional: online AI</h3><p class="muted">StudyMate works fully offline by default. To use an OpenAI-compatible API for notes and quizzes, fill these in. The key is stored only in this browser\'s localStorage and sent only to the URL you enter. Any error falls back to offline AI.</p>' +
+      '<form data-form="settings-save"><div class="row"><div class="field"><label for="set-base">API base URL</label><input id="set-base" name="apiBase" type="url" placeholder="https://api.openai.com/v1" value="' + esc(s.apiBase) + '"></div>' +
+      '<div class="field"><label for="set-model">Model</label><input id="set-model" name="model" value="' + esc(s.model) + '"></div>' +
+      '<div class="field"><label for="set-key">API key</label><input id="set-key" name="apiKey" type="password" autocomplete="off" value="' + esc(s.apiKey) + '"></div></div>' +
+      '<div class="row"><button class="btn" type="submit">Save</button><button type="button" class="btn secondary" data-action="settings-clear">Clear API settings</button></div></form></div>';
+  }
+
+  var RENDER = { dashboard: renderDashboard, subjects: renderSubjects, notes: renderNotes, flashcards: renderFlashcards, quiz: renderQuiz, planner: renderPlanner, settings: renderSettings };
+  function render() {
+    document.documentElement.setAttribute('data-theme', state.settings.dark ? 'dark' : 'light');
+    var tb = document.getElementById('theme-btn');
+    tb.setAttribute('aria-pressed', String(!!state.settings.dark)); tb.textContent = state.settings.dark ? 'Light mode' : 'Dark mode';
+    document.getElementById('provider-badge').textContent = (state.settings.apiBase && state.settings.apiKey) ? 'Online AI (with offline fallback)' : 'Offline AI';
+    Object.keys(RENDER).forEach(function (t) {
+      var btn = document.getElementById('tab-' + t), panel = document.getElementById('panel-' + t), active = t === ui.tab;
+      btn.setAttribute('aria-selected', String(active)); btn.tabIndex = active ? 0 : -1;
+      panel.hidden = !active;
+      if (active) panel.innerHTML = RENDER[t]();
+    });
+  }
+
+  // ---------- demo data ----------
+  var DEMO = [
+    { name: 'Biology: Photosynthesis', days: 5, title: 'Photosynthesis basics', score: 60, text: 'Photosynthesis is the process by which green plants use sunlight to make glucose from carbon dioxide and water. Chlorophyll is the green pigment in chloroplasts that absorbs light energy. Chloroplasts are organelles found in plant cells where photosynthesis takes place. The light-dependent reactions occur in the thylakoid membranes and produce ATP and NADPH. The Calvin cycle refers to the light-independent reactions that fix carbon dioxide into glucose in the stroma. Oxygen is released as a by-product when water molecules are split during the light-dependent reactions. Stomata are tiny pores on the leaf surface that allow carbon dioxide to enter and oxygen to leave. The rate of photosynthesis depends on light intensity, carbon dioxide concentration and temperature. Glucose produced by photosynthesis is used for respiration or stored as starch. Without photosynthesis, most life on Earth would not have the oxygen and food energy it needs.' },
+    { name: 'History: World War I', days: 9, title: 'Causes and course of WWI', score: 80, text: 'World War I was a global conflict fought from 1914 to 1918 between the Allied Powers and the Central Powers. The assassination of Archduke Franz Ferdinand in Sarajevo in June 1914 triggered the war. Militarism refers to the build-up of armed forces and the belief that military power solves disputes. The alliance system meant that a conflict between two countries quickly drew in their partners. Trench warfare is a type of fighting in which soldiers defend long lines of deep ditches. The Western Front was a line of trenches stretching from the North Sea to Switzerland. The Treaty of Versailles was signed in 1919 and forced Germany to accept blame and pay reparations. Reparations are payments made by a defeated country to cover war damages. The United States entered the war in 1917 after German submarines attacked American ships. More than sixteen million soldiers and civilians died during the war.' },
+    { name: "Physics: Newton's laws", days: 14, title: "Newton's three laws", score: null, text: "Newton's first law states that an object stays at rest or keeps moving at a constant velocity unless a net force acts on it. Inertia is the tendency of an object to resist changes in its motion. Newton's second law states that force equals mass times acceleration. Acceleration is the rate at which velocity changes over time. Mass is the amount of matter in an object and is measured in kilograms. Newton's third law states that for every action there is an equal and opposite reaction. A force is a push or pull measured in newtons. Friction is a force that opposes motion between two surfaces in contact. Gravity pulls objects toward the centre of the Earth with an acceleration of about 9.8 metres per second squared. Engineers use Newton's laws to design cars, bridges and rockets." }
+  ];
+  function loadDemo() {
+    if (state.subjects.length && !confirm('Replace your current data with demo data?')) return;
+    var settings = state.settings, t = today();
+    state = C.defaultState(); state.settings = settings;
+    DEMO.forEach(function (d, i) {
+      var s = { id: C.uid(), name: d.name, examDate: C.addDays(t, d.days) };
+      state.subjects.push(s);
+      var n = C.generateNotes(d.text, d.title);
+      state.notes.push({ id: C.uid(), subjectId: s.id, title: d.title, source: d.text, markdown: n.markdown, data: n, createdAt: new Date().toISOString() });
+      if (i < 2) state.cards = state.cards.concat(C.cardsFromNotes(n, d.text, s.id, t));
+      if (d.score != null) { var qs = C.generateQuiz(d.text, 5), total = qs.length, correct = Math.round(total * d.score / 100); state.attempts.push({ id: C.uid(), subjectId: s.id, correct: correct, total: total, percent: Math.round(correct * 100 / total), date: t }); }
+    });
+    makePlan(2, t);
+    save(); ui = Object.assign(ui, { tab: 'dashboard', noteId: null, quiz: null, quizResult: null, practice: null });
+    render(); announce('Demo data loaded.');
+  }
+  function makePlan(hours, start) {
+    state.plan = { hoursPerDay: hours, startDate: start, done: {}, sessions: C.generatePlan({ subjects: state.subjects, startDate: start, hoursPerDay: hours, scores: C.subjectScores(state.attempts) }) };
+  }
+
+  // ---------- actions ----------
+  var ACTIONS = {
+    tab: function (el) { ui.tab = el.dataset.tab; render(); },
+    theme: function () { state.settings.dark = !state.settings.dark; save(); render(); },
+    demo: loadDemo,
+    reset: function () {
+      if (!confirm('Delete ALL StudyMate data in this browser? This cannot be undone.')) return;
+      store.clear(); state = C.defaultState(); ui = Object.assign(ui, { noteId: null, quiz: null, quizResult: null, practice: null, draftText: '', draftTitle: '' });
+      render(); announce('All data reset.');
+    },
+    'subject-del': function (el) {
+      var s = subj(el.dataset.id); if (!s || !confirm('Delete "' + s.name + '" with its notes, cards and scores?')) return;
+      var keep = function (x) { return x.subjectId !== s.id; };
+      state.subjects = state.subjects.filter(function (x) { return x.id !== s.id; });
+      state.notes = state.notes.filter(keep); state.cards = state.cards.filter(keep); state.attempts = state.attempts.filter(keep);
+      state.plan.sessions = state.plan.sessions.filter(keep);
+      save(); render();
+    },
+    'note-open': function (el) { ui.noteId = el.dataset.id; render(); },
+    'note-del': function (el) {
+      if (!confirm('Delete this note?')) return;
+      state.notes = state.notes.filter(function (n) { return n.id !== el.dataset.id; });
+      if (ui.noteId === el.dataset.id) ui.noteId = null; save(); render();
+    },
+    'note-save': function () { var n = currentNote(); if (!n) return; n.markdown = document.getElementById('note-editor').value; save(); render(); announce('Note saved.'); },
+    'note-dl': function (el) { var n = currentNote(); if (!n) return; var text = document.getElementById('note-editor').value; download(safeName(n.title) + '.' + el.dataset.ext, text, el.dataset.ext === 'md' ? 'text/markdown' : 'text/plain'); },
+    'note-cards': function () {
+      var n = currentNote(); if (!n) return;
+      var data = n.data && C.validNotes(n.data) ? n.data : C.generateNotes(n.source, n.title);
+      var cards = C.cardsFromNotes(data, n.source, n.subjectId, today());
+      state.cards = state.cards.concat(cards); save(); render(); announce(cards.length + ' flashcards created.');
+      alert(cards.length + ' flashcards created. Open the Flashcards tab to practice.');
+    },
+    'note-quiz': function () { var n = currentNote(); if (!n) return; ui.tab = 'quiz'; buildQuiz(n, 5); },
+    'card-del': function (el) { state.cards = state.cards.filter(function (c) { return c.id !== el.dataset.id; }); save(); render(); },
+    'practice-start': function () {
+      var sid = document.getElementById('practice-subject').value;
+      var q = state.cards.filter(function (c) { return C.isDue(c, today()) && (!sid || c.subjectId === sid); }).map(function (c) { return c.id; });
+      if (!q.length) { announce('No cards due for this subject.'); alert('No cards due for this subject.'); return; }
+      ui.practice = { queue: q }; ui.flipped = false; render();
+    },
+    'card-flip': function () { ui.flipped = true; render(); },
+    'card-rate': function (el) {
+      var id = ui.practice.queue.shift();
+      state.cards = state.cards.map(function (c) { return c.id === id ? C.reviewCard(c, el.dataset.rating, today()) : c; });
+      if (el.dataset.rating === 'again') ui.practice.queue.push(id);
+      ui.flipped = false; save(); render();
+    },
+    'practice-stop': function () { ui.practice = null; render(); },
+    'quiz-clear': function () { ui.quiz = null; ui.quizResult = null; render(); },
+    'settings-clear': function () { state.settings.apiBase = ''; state.settings.apiKey = ''; save(); render(); announce('API settings cleared.'); }
+  };
+  function currentNote() { return state.notes.filter(function (n) { return n.id === ui.noteId; })[0]; }
+  function buildQuiz(note, n) {
+    ui.busy = true; render();
+    return C.aiQuiz(note.source || note.markdown, n, state.settings).then(function (res) {
+      ui.busy = false; ui.quiz = { noteId: note.id, subjectId: note.subjectId, questions: res.questions }; ui.quizResult = null;
+      render(); announce(res.questions.length + ' questions ready' + (res.error ? ' (offline fallback: ' + res.error + ')' : ''));
+    });
+  }
+
+  var FORMS = {
+    'subject-add': function (f) {
+      var name = f.name.value.trim(), date = f.examDate.value; if (!name || !date) return;
+      state.subjects.push({ id: C.uid(), name: name, examDate: date }); save(); render(); announce('Subject added.');
+    },
+    'note-generate': function (f) {
+      var text = f.text.value.trim(), subjectId = f.subjectId.value, title = f.title.value.trim() || 'Notes ' + today();
+      if (!text) return;
+      ui.busy = true; ui.status = ''; ui.draftText = text; ui.draftTitle = title; ui.draftSubject = subjectId; render();
+      return C.aiNotes(text, title, state.settings).then(function (res) {
+        var note = { id: C.uid(), subjectId: subjectId, title: title, source: text, markdown: res.notes.markdown, data: res.notes, createdAt: new Date().toISOString() };
+        state.notes.unshift(note); save();
+        ui.busy = false; ui.noteId = note.id; ui.draftText = ''; ui.draftTitle = '';
+        ui.status = 'Generated with ' + (res.provider === 'api' ? 'online AI' : 'offline AI') + (res.error ? ' (fallback: ' + res.error + ')' : '') + '.';
+        render(); announce('Notes generated.');
+      });
+    },
+    'card-add': function (f) {
+      state.cards.push(C.createCard(f.front.value.trim(), f.back.value.trim(), f.subjectId.value, today())); save(); render(); announce('Card added.');
+    },
+    'quiz-gen': function (f) {
+      var note = state.notes.filter(function (n) { return n.id === f.noteId.value; })[0]; if (!note) return;
+      buildQuiz(note, Math.min(15, Math.max(1, parseInt(f.n.value, 10) || 5)));
+    },
+    'quiz-submit': function (f) {
+      var answers = {};
+      ui.quiz.questions.forEach(function (q) { var c = f.querySelector('input[name="' + CSS.escape(q.id) + '"]:checked'); if (c) answers[q.id] = c.value; });
+      var r = C.gradeQuiz(ui.quiz.questions, answers);
+      ui.quizResult = r;
+      state.attempts.push({ id: C.uid(), subjectId: ui.quiz.subjectId, noteId: ui.quiz.noteId, correct: r.correct, total: r.total, percent: r.percent, date: today() });
+      save(); render(); announce('Score ' + r.percent + ' percent.');
+    },
+    'plan-gen': function (f) {
+      var hours = parseFloat(f.hours.value) || 2, start = f.start.value || today();
+      var oldDone = state.plan.done || {};
+      makePlan(hours, start);
+      state.plan.sessions.forEach(function (s) { if (oldDone[s.id]) state.plan.done[s.id] = true; });
+      save(); render(); announce(state.plan.sessions.length + ' sessions planned.');
+    },
+    'settings-save': function (f) {
+      state.settings.apiBase = f.apiBase.value.trim(); state.settings.apiKey = f.apiKey.value.trim(); state.settings.model = f.model.value.trim() || 'gpt-4o-mini';
+      save(); render(); announce('Settings saved.');
+    }
+  };
+
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest('[data-action]');
+    if (!el || el.dataset.action === 'plan-toggle') return;
+    var fn = ACTIONS[el.dataset.action]; if (fn) fn(el, e);
+  });
+  document.addEventListener('submit', function (e) {
+    var fn = FORMS[e.target.dataset.form]; if (!fn) return;
+    e.preventDefault(); fn(e.target);
+  });
+  document.addEventListener('change', function (e) {
+    var t = e.target;
+    if (t.dataset && t.dataset.action === 'plan-toggle') {
+      if (t.checked) state.plan.done[t.dataset.id] = true; else delete state.plan.done[t.dataset.id];
+      t.parentNode.classList.toggle('done', t.checked); save(); return;
+    }
+    if (t.id === 'note-file' && t.files && t.files[0]) {
+      var file = t.files[0], reader = new FileReader();
+      reader.onload = function () {
+        ui.draftText = String(reader.result); ui.draftTitle = document.getElementById('note-title').value || file.name.replace(/\.[^.]+$/, '');
+        ui.draftSubject = document.getElementById('note-subject').value; render(); announce('File loaded.');
+      };
+      reader.readAsText(file);
+    }
+  });
+  document.addEventListener('input', function (e) {
+    if (e.target.id === 'note-text') ui.draftText = e.target.value;
+    if (e.target.id === 'note-title') ui.draftTitle = e.target.value;
+    if (e.target.id === 'note-subject') ui.draftSubject = e.target.value;
+    if (e.target.id === 'note-editor') document.getElementById('note-preview').innerHTML = C.mdToHtml(e.target.value);
+  });
+  // Arrow-key navigation between tabs (WAI-ARIA tabs pattern).
+  document.querySelector('nav.tabs').addEventListener('keydown', function (e) {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+    var tabs = Object.keys(RENDER), i = tabs.indexOf(ui.tab);
+    ui.tab = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+    render(); document.getElementById('tab-' + ui.tab).focus();
+  });
+
+  window.StudyApp = { getState: function () { return state; }, ui: ui };
+  render();
+})();
+</script>
+</body>
+</html>

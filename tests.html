@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>StudyMate AI – tests</title>
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; margin: 20px; }
+  .pass { color: #166534; } .fail { color: #991b1b; font-weight: 600; }
+  iframe { width: 1px; height: 1px; border: 0; position: absolute; left: -9999px; }
+</style>
+</head>
+<body>
+<h1>StudyMate AI – test suite</h1>
+<p>Loads <code>../index.html?test=1</code> in a hidden iframe (separate storage key, your data is untouched) and tests <code>StudyCore</code> plus a UI smoke run.</p>
+<ul id="log"></ul>
+<pre id="result">RUNNING</pre>
+<iframe id="app" title="App under test" src="../index.html?test=1"></iframe>
+<script src="tests.js"></script>
+</body>
+</html>
