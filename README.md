@@ -8,117 +8,153 @@
 
 ## Problem
 
-Students juggle several subjects, long textbook chapters and exam dates that all land at once. Turning material into usable notes, testing yourself, and deciding what to study each day takes time most students don't have. Many AI tools also need an account, a paid API key or an internet connection.
+Students juggle several subjects, long textbook chapters, and exam dates that all arrive at once. Turning study material into useful notes, testing yourself, and deciding what to study each day takes time. Many AI tools also require an account, a paid API key, or an internet connection.
 
 ## Solution
 
-StudyMate AI is a single `index.html` file. Open it in a browser and you get:
+StudyMate AI is a browser-based study assistant built primarily as a single `index.html` file. Open it in a browser to access:
 
 - Subjects with exam dates
-- An AI notes generator (summary, key concepts, definitions, bullet notes) with an editable Markdown editor
-- Auto-generated flashcards with SM-2-style spaced repetition
-- Auto-generated quizzes (multiple choice + true/false) with scoring and explanations
-- A study planner that schedules your days up to each exam
-- A dashboard that shows where you stand
+- An offline notes generator for summaries, key concepts, definitions, and bullet notes
+- An editable Markdown notes editor
+- Flashcards with SM-2-style spaced repetition
+- Multiple-choice and true/false quizzes with scoring and explanations
+- A study planner that schedules sessions around upcoming exams
+- A dashboard showing study progress
 
-No install, no server, no internet, no account.
+The core app works without installation, a server, an account, or an internet connection.
 
 ## Features
 
 | Area | What it does |
 |---|---|
-| Dashboard | Stat cards: subjects, upcoming exams with days left, average quiz score, planner completion %, flashcards due today. Today's sessions. |
-| Subjects | Add or delete subjects with an exam date. |
-| Notes | Paste text or load a `.txt`/`.md` file, then generate structured notes. Edit them as Markdown with a live preview. Download as `.md` or `.txt`. |
-| Flashcards | Created from a note (definitions become term/definition cards, key concepts become cloze cards) or added by hand. Practice mode flips cards; rate Again/Good/Easy to schedule the next review. |
-| Quiz | Generate N questions from a note: cloze MCQ with 3 keyword distractors, plus true/false. Submit to see the score, correct answers and the source sentence. Scores are saved per subject. |
-| Planner | Set hours per day and a start date. You get a day-by-day plan, weighted toward sooner exams and weaker subjects (lower quiz scores), with a review day before every exam. Tick sessions off as you go. |
-| Extras | Dark mode, demo data, reset, optional online AI. |
+| Dashboard | Shows subjects, upcoming exams, average quiz score, planner completion, flashcards due, and today's sessions. |
+| Subjects | Add and delete subjects and set exam dates. |
+| Notes | Paste text or load `.txt` and `.md` files, generate structured notes, edit Markdown, preview content, and download notes. |
+| Flashcards | Generate cards from notes or add them manually. Flip cards and rate them Again, Good, or Easy to schedule future reviews. |
+| Quiz | Generate multiple-choice and true/false questions from notes. Review scores, correct answers, and source sentences. |
+| Planner | Create a day-by-day study plan based on exam dates, quiz performance, and a daily time budget. Mark sessions as complete. |
+| Extras | Dark mode, demo data, data reset, and optional online AI settings. |
 
-## How the offline AI works
+## How the Offline Study Engine Works
 
-Everything runs in plain JavaScript inside the page (`<script id="core">`, exposed as `window.StudyCore`). It is deterministic and makes no network calls.
+The offline engine runs in JavaScript inside the browser. Its core logic is exposed through `window.StudyCore` for testing.
 
-1. Sentence splitting: splits on `.`, `!` or `?` followed by a capital letter or digit, so decimals like `9.8` stay intact.
-2. Keyword scoring: lowercases, removes stopwords and counts word frequency. The most frequent terms become the key concepts.
-3. Summary: each sentence is scored by the sum of its keyword frequencies divided by √length. The top sentences are returned in their original order.
-4. Definitions: sentences like *"X is / are / was / refers to / means / is defined as …"* become term/definition pairs. Pronoun subjects ("It is…") are ignored.
-5. Quiz: the highest-scoring sentences have their main keyword blanked out (cloze). The distractors are other keywords from the same material. Some questions become true/false by swapping in a different keyword. A seeded random generator keeps results reproducible.
-6. Flashcards: SM-2-style scheduling. Each card has an ease (starts at 2.5, never below 1.3), an interval and a due date. "Good" gives intervals of 1 → 6 → interval × ease days. "Easy" adds a bonus. "Again" resets the card and lowers its ease.
-7. Planner: for each day, each subject gets weight = (weakness factor) / (days until exam). The weakness factor is 1 + (100 − avg score)/100, or 1.5 if the subject has no quizzes yet. Minutes are split in 15-minute blocks and never go over your daily budget. The day before an exam is reserved for reviewing that subject.
+The offline engine is rule-based and deterministic; it does not make network requests.
 
-## Optional: real AI
+1. **Sentence splitting:** Splits text into sentences while attempting to preserve decimal numbers such as `9.8`.
+2. **Keyword scoring:** Counts meaningful words after removing common stopwords. Frequent terms help identify key concepts.
+3. **Summaries:** Scores sentences using keyword frequency and sentence length, then selects relevant sentences in their original order.
+4. **Definitions:** Detects definition-style sentences such as “X is…”, “X refers to…”, and “X means…”.
+5. **Quizzes:** Creates fill-in-the-blank multiple-choice questions using keywords and distractors from the source material. It can also create true/false questions.
+6. **Flashcards:** Uses an SM-2-style spaced-repetition approach. Cards have an ease factor, review interval, and due date. Again, Good, and Easy ratings affect scheduling.
+7. **Study planning:** Allocates study time according to exam urgency and quiz performance, while respecting the daily time budget and scheduling review before exams.
 
-Open Settings and enter an OpenAI-compatible base URL (e.g. `https://api.openai.com/v1`), an API key and a model. Notes and quizzes then call `POST {base}/chat/completions` and ask for JSON. If the request fails, the response is invalid, or the JSON has the wrong shape, the app quietly falls back to the offline engine.
+The quality of generated notes, quizzes, and flashcards depends on the clarity and content of the source material.
 
-Security note: the API key is stored only in your browser's `localStorage` and is sent only to the URL you enter. Don't use a shared computer for this, and click "Clear API settings" when you're done.
+## Optional Online AI
 
-## Quick start
+The app also supports an optional OpenAI-compatible API, if configured in Settings.
 
-1. Download or clone this repository.
-2. Double-click `index.html`. It opens in Microsoft Edge, Chrome, Firefox or Safari.
-3. Click **Load demo data** on the Dashboard.
+Users can enter a compatible base URL, API key, and model. Notes and quizzes can then request generated content through a chat-completions endpoint. If the request fails or the response is invalid, the app can fall back to its offline engine.
 
-You don't need Python, Node, npm or Git. If you'd rather serve it, any static server works, for example `npx serve .` or `python -m http.server 8000`, then open `http://localhost:8000`.
+**Security note:** The API key is stored in the browser's `localStorage` and sent to the configured API endpoint. Do not use this feature on a shared computer, and clear the API settings when finished. Do not enter an API key unless you trust the endpoint.
 
-### Setup per OS
+## Quick Start
 
-- Windows: right-click `index.html` → Open with → Microsoft Edge.
-- macOS: `open index.html` (or double-click it in Finder).
-- Linux: `xdg-open index.html`.
+1. Open or download this repository.
+2. Open `index.html` in Microsoft Edge, Chrome, Firefox, or Safari.
+3. Select **Load demo data** on the Dashboard.
+4. Explore subjects, notes, flashcards, quizzes, and the study planner.
 
-## Demo walkthrough (3 minutes)
+You do not need Python, Node.js, npm, or Git to run the main HTML application.
 
-See [docs/DEMO_GUIDE.md](docs/DEMO_GUIDE.md).
+### Setup by Operating System
 
-## Project structure
+- **Windows:** Right-click `index.html` and choose Open with → Microsoft Edge.
+- **macOS:** Double-click `index.html`, or run `open index.html`.
+- **Linux:** Run `xdg-open index.html`.
 
+Alternatively, you can use a static server. For example:
+
+```bash
+python -m http.server 8000
 ```
-index.html          The whole app: styles, core logic (<script id="core">), UI (<script id="app">)
-tests/tests.html    In-browser test runner (loads index.html?test=1 in an iframe)
-tests/tests.js      Unit tests + UI smoke test
-docs/DEMO_GUIDE.md  3-minute demo script for judges
-LICENSE             MIT
+
+Then open `http://localhost:8000` in your browser.
+
+## Demo Walkthrough
+
+See [DEMO_GUIDE.md](DEMO_GUIDE.md) for the short demonstration guide.
+
+## Project Structure
+
+```text
+index.html          Main offline application, styles, logic, and UI
+README.md           Project documentation
+DEMO_GUIDE.md       Short demonstration guide for judges
+LICENSE             MIT license
+tests.html          In-browser test runner
+tests.js            Unit tests and UI smoke tests
+app.py              Older Streamlit prototype
+requirements.txt    Dependencies for the older Streamlit prototype
 ```
 
-## Tech
+The main offline application is `index.html`. The Streamlit files are retained as an earlier prototype and are not required to run the main HTML app.
 
-Vanilla HTML, CSS and JavaScript in a single file. There are zero dependencies and no build step.
+## Technology
 
-- It runs from `file://`, so judges and students can use it anywhere, even offline in an exam hall.
-- There is no supply chain to audit and nothing to install. It loads instantly.
-- The pure logic is isolated in `StudyCore`, so it is easy to test and easy to port to a backend later.
+StudyMate AI uses vanilla HTML, CSS, and JavaScript. The main offline app has no external library dependencies or build step.
 
-Accessibility: semantic HTML, a labelled control for every input, real `<button>`s, ARIA tabs with arrow-key navigation, visible focus outlines, a skip link, a live region for status messages, and high-contrast light and dark themes. All user text is HTML-escaped before rendering. Full WCAG compliance would still need manual testing with assistive technologies.
+- Runs directly from a local HTML file.
+- Works offline for its core features.
+- Stores user data in the browser's `localStorage`.
+- Separates core study logic into `StudyCore` to make it easier to test and maintain.
+- Supports responsive layouts and light and dark themes.
+
+### Accessibility
+
+The app is designed with accessibility in mind, including semantic HTML, labelled controls, keyboard-friendly navigation, visible focus indicators, a skip link, status announcements, and escaping of user-provided text before rendering.
+
+Full accessibility compliance has not been independently verified and would require additional manual testing with assistive technologies.
 
 ## Privacy
 
-All data (subjects, notes, cards, scores, plan, settings) stays in your browser's `localStorage`. Nothing is uploaded unless you configure the optional API. **Reset data** removes everything.
+Subjects, notes, flashcards, scores, study plans, and settings are stored in the browser's `localStorage`.
 
-## Running tests
+The core offline features do not upload this data. If optional online AI is configured, the relevant content is sent to the selected API endpoint to generate responses.
 
-- In a browser, open `tests/tests.html`. You need a browser that allows file-to-file iframe access, such as Edge or Chrome started with `--allow-file-access-from-files`, or you can serve the folder with a static server. The page ends with `PASS n/n` or `FAIL` plus details. Tests use a separate storage key, so your real data is untouched.
-- Headless (Windows / Edge):
+Using **Reset data** removes the app's locally stored study data. Clear API settings separately if needed.
 
-```powershell
-& "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --headless=new --disable-gpu --allow-file-access-from-files --virtual-time-budget=10000 --dump-dom "file:///C:/path/to/repo/tests/tests.html" | Select-String 'id="result"'
-```
+## Running Tests
 
-The tests cover sentence splitting, keywords, definitions, summary length, XSS escaping, quiz generation and grading, planner constraints, SM-2 flashcards, storage, dashboard stats, the offline fallback, and a UI smoke run.
+The repository includes an in-browser test runner and JavaScript tests.
+
+- Open `tests.html` in a browser to try the test runner.
+- Depending on browser security restrictions, local file access may require a static server or additional browser configuration.
+- If a test fails, review the displayed error details before making a conclusion about the result.
+
+The test suite is intended to cover text processing, definitions, summaries, quiz generation and grading, planner constraints, flashcard scheduling, storage, dashboard statistics, offline fallback, and UI behaviour.
+
+**Note:** Automated test results must be verified by running the test suite. The presence of test files does not itself confirm that all tests pass.
 
 ## Troubleshooting
 
-- Data disappeared: `localStorage` is per browser and per profile. Private windows don't keep it.
-- Tests say "could not access StudyCore": the browser is blocking `file://` iframe access. Use the flag above or a static server.
-- Online AI isn't used: check the base URL (it must include `/v1` for OpenAI) and the key. On any error the app falls back offline, and the status text shows the reason.
+- **Data appears to be missing:** Browser storage is specific to the browser profile. Private browsing may not retain data.
+- **Tests cannot access `StudyCore`:** The browser may be blocking local file iframe access. Try running the project with a static server.
+- **Online AI is unavailable:** Check the API URL, model, API key, network connection, and API permissions. The offline engine may still work if the online request fails.
+- **The app does not open correctly:** Download the complete repository and open `index.html` in a modern browser.
 
 ## Roadmap
 
 - PDF import
-- Sync and export/import of all data as JSON
-- Better NLP (multi-word key phrases) and image-based flashcards
-- PWA install for mobile
+- Data backup and restore using JSON
+- Improved keyword and phrase extraction
+- Image-based flashcards
+- Progressive Web App support for mobile installation
 
 ## License
 
-[MIT](LICENSE) © 2026 StudyMate AI Contributors
+This project is licensed under the [MIT License](LICENSE).
+
+Copyright (c) 2026 StudyMate AI Contributors.
